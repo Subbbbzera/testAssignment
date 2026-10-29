@@ -20,7 +20,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         },
       ]),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || 'booking_super_secret_jwt_key_2026',
+      secretOrKey: process.env.JWT_SECRET || 'testKEY',
     });
   }
 
