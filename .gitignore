@@ -1,6 +1,6 @@
 node_modules/
 .env
 dist/
-    dist-ssr/
-    build/
-    *.tsbuildinfo
+dist-ssr/
+build/
+*.tsbuildinfo
