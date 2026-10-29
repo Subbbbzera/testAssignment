@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(savedToken)
         return
       } catch {
-        // Якщо токен не JWT (наприклад моковий)
+        // Якщо токен недійсний
       }
     }
 
@@ -69,57 +69,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Вхід: надсилає запит на бекенд, зберігає токен у Cookies
   const login = async (email: string, password = 'password123') => {
+    const response = await apiClient.post('/auth/login', { email, password })
+    const { access_token, user: apiUser } = response.data
+
+    setCookie(COOKIE_NAME, access_token, 7)
+    localStorage.setItem('booking_access_token', access_token)
+
+    let currentUser: User
     try {
-      const response = await apiClient.post('/auth/login', { email, password })
-      const { access_token, user: apiUser } = response.data
-
-      setCookie(COOKIE_NAME, access_token, 7)
-      localStorage.setItem('booking_access_token', access_token)
-
-      let currentUser: User
-      try {
-        const decoded = jwtDecode<JwtPayload>(access_token)
-        currentUser = {
-          id: decoded.sub,
-          email: decoded.email,
-          role: decoded.role,
-        }
-      } catch {
-        currentUser = apiUser || {
-          id: String(Date.now()),
-          email,
-          role: email.toLowerCase().includes('admin') ? 'admin' : 'user',
-        }
+      const decoded = jwtDecode<JwtPayload>(access_token)
+      currentUser = {
+        id: decoded.sub,
+        email: decoded.email,
+        role: decoded.role,
       }
-
-      setUser(currentUser)
-      setToken(access_token)
-      localStorage.setItem(USER_KEY, JSON.stringify(currentUser))
     } catch {
-      // Локальний фолбек, якщо бекенд ще не запущений
-      const role: Role = email.toLowerCase().includes('admin') ? 'admin' : 'user'
-      const fallbackUser: User = {
+      currentUser = apiUser || {
         id: String(Date.now()),
         email,
-        role,
+        role: email.toLowerCase().includes('admin') ? 'admin' : 'user',
       }
-      const mockToken = `mock_cookie_token_${Date.now()}`
-      setCookie(COOKIE_NAME, mockToken, 7)
-      localStorage.setItem('booking_access_token', mockToken)
-      localStorage.setItem(USER_KEY, JSON.stringify(fallbackUser))
-      setUser(fallbackUser)
-      setToken(mockToken)
     }
+
+    setUser(currentUser)
+    setToken(access_token)
+    localStorage.setItem(USER_KEY, JSON.stringify(currentUser))
   }
 
   // Реєстрація: POST /auth/register
+  // ВАЖЛИВО: не придушуємо помилки (наприклад 409 Conflict), а викидаємо їх далі для зупинки форми!
   const register = async (email: string, password = 'password123') => {
-    try {
-      await apiClient.post('/auth/register', { email, password })
-    } catch {
-      // Якщо бекенд ще офлайн, продовжуємо для безперебійного UI
-    }
-    // Після реєстрації автоматично логінимо
+    await apiClient.post('/auth/register', { email, password })
+    // Автоматично логінимо лише у разі успішної реєстрації
     await login(email, password)
   }
 

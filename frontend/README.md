@@ -1,32 +1,50 @@
-# React + TypeScript + Vite
+# Room Booking System — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React + Vite + TypeScript + Tailwind CSS UI для системи бронювання переговорних кімнат.
 
-Currently, two official plugins are available:
+## Вимоги
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Node.js 18+
+- Запущений backend (`npm run start:dev` у папці `/backend`)
 
-## React Compiler
+## Встановлення
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Змінні середовища
+
+Створіть файл `.env` на основі `.env.example`:
+
+```bash
+cp .env.example .env
+```
+
+| Змінна | Опис | За замовчуванням |
+|---|---|---|
+| `VITE_API_URL` | URL бекенду | `http://localhost:3000` |
+
+## Запуск
+
+```bash
+# Розробка
+npm run dev
+
+# Продакшн-білд
+npm run build
+npm run preview
+```
+
+## Функціонал
+
+### Для користувача (`user`)
+- Пошук вільних переговорних кімнат за часовим проміжком
+- Бронювання кімнати (з перевіркою конфліктів)
+- Перегляд власних майбутніх броней (вкладка «Мої броні»)
+- Скасування власного бронювання
+
+### Для адміністратора (`admin`)
+- Усе, що доступно користувачу
+- Вкладка «Керування кімнатами»: створення кімнат, перегляд усіх кімнат
+- Вкладка «Усі броні»: таблиця всіх бронювань системи з можливістю видалення

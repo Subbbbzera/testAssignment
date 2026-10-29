@@ -14,16 +14,16 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({})
+  const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({})
   const [isLoading, setIsLoading] = useState(false)
 
   if (!isOpen) return null
 
   const validate = () => {
     const newErrors: { email?: string; password?: string } = {}
-    if (!email) {
+    if (!email.trim()) {
       newErrors.email = 'Вкажіть email'
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
+    } else if (!/\S+@\S+\.\S+/.test(email.trim())) {
       newErrors.email = 'Некоректний формат email'
     }
 
@@ -39,26 +39,48 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setErrors({})
     if (!validate()) return
 
     setIsLoading(true)
     try {
       if (tab === 'login') {
-        await login(email, password)
-        toast.success(`Вітаємо, ${email}!`)
+        await login(email.trim(), password)
+        toast.success(`Вітаємо, ${email.trim()}!`)
       } else {
-        await register(email, password)
-        toast.success('Акаунт успішно зареєстровано!')
+        await register(email.trim(), password)
+        toast.success('Акаунт успішно створено!')
       }
 
-      // Скидання та закриття
+      // Скидання та закриття ТІЛЬКИ при успішному завершенні
       setEmail('')
       setPassword('')
       setShowPassword(false)
       setErrors({})
       onClose()
-    } catch {
-      toast.error('Помилка авторизації')
+    } catch (err: any) {
+      // Якщо 409 Conflict або інша помилка — зупиняємо користувача тут і показуємо помилку
+      const status = err?.response?.status
+      const serverMsg = err?.response?.data?.message
+
+      let errorText = 'Помилка авторизації'
+
+      if (status === 409) {
+        errorText = typeof serverMsg === 'string' ? serverMsg : 'Користувач з таким email вже зареєстрований'
+        setErrors((prev) => ({ ...prev, email: errorText }))
+      } else if (status === 401) {
+        errorText = typeof serverMsg === 'string' ? serverMsg : 'Невірний email або пароль'
+        setErrors((prev) => ({ ...prev, password: errorText }))
+      } else if (serverMsg) {
+        errorText = Array.isArray(serverMsg) ? serverMsg.join(', ') : serverMsg
+        setErrors((prev) => ({ ...prev, general: errorText }))
+      } else if (err?.message) {
+        errorText = err.message
+        setErrors((prev) => ({ ...prev, general: errorText }))
+      }
+
+      toast.error(errorText)
+      // Зупиняємося — модалка НЕ закривається!
     } finally {
       setIsLoading(false)
     }
@@ -111,6 +133,12 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           </button>
         </div>
 
+        {errors.general && (
+          <div className="mb-4 p-2.5 bg-red-950/40 border border-red-800/60 rounded-[8px] text-xs text-red-300">
+            {errors.general}
+          </div>
+        )}
+
         {/* Форма */}
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Поле Email */}
@@ -121,9 +149,14 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value)
+                  if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }))
+                }}
                 placeholder="name@example.com"
-                className="w-full bg-[#242424] border border-neutral-700 rounded-[8px] h-[38px] pl-9 pr-3 text-sm text-neutral-200 placeholder:text-neutral-500 focus:outline-none focus:border-sky-500 transition-colors"
+                className={`w-full bg-[#242424] border rounded-[8px] h-[38px] pl-9 pr-3 text-sm text-neutral-200 placeholder:text-neutral-500 focus:outline-none transition-colors ${
+                  errors.email ? 'border-red-500 focus:border-red-500' : 'border-neutral-700 focus:border-sky-500'
+                }`}
               />
             </div>
             {errors.email && <p className="text-xs text-red-400">{errors.email}</p>}
@@ -137,9 +170,14 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value)
+                  if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }))
+                }}
                 placeholder="Мінімум 6 символів"
-                className="w-full bg-[#242424] border border-neutral-700 rounded-[8px] h-[38px] pl-9 pr-10 text-sm text-neutral-200 placeholder:text-neutral-500 focus:outline-none focus:border-sky-500 transition-colors"
+                className={`w-full bg-[#242424] border rounded-[8px] h-[38px] pl-9 pr-10 text-sm text-neutral-200 placeholder:text-neutral-500 focus:outline-none transition-colors ${
+                  errors.password ? 'border-red-500 focus:border-red-500' : 'border-neutral-700 focus:border-sky-500'
+                }`}
               />
               <button
                 type="button"
