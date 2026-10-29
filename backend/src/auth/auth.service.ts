@@ -43,13 +43,13 @@ export class AuthService implements OnModuleInit {
             role: 'admin',
           },
         });
-        this.logger.log(`👑 Створено адміністратора: ${adminEmail}`);
+        this.logger.log(`Створено адміністратора: ${adminEmail}`);
       } else if (existing.role !== 'admin') {
         await this.prisma.user.update({
           where: { id: existing.id },
           data: { role: 'admin' },
         });
-        this.logger.log(`👑 Оновлено права користувача ${adminEmail} до ролі admin`);
+        this.logger.log(`Оновлено права користувача ${adminEmail} до ролі admin`);
       }
     } catch (error) {
       this.logger.warn(`Попередження при створенні адміна (можливо, ще не виконано міграцію БД): ${error}`);
@@ -66,13 +66,12 @@ export class AuthService implements OnModuleInit {
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
-    const role = dto.email.toLowerCase().includes('admin') ? 'admin' : 'user';
 
     const user = await this.prisma.user.create({
       data: {
         email: dto.email.toLowerCase(),
         password: hashedPassword,
-        role,
+        role: 'user',
       },
     });
 

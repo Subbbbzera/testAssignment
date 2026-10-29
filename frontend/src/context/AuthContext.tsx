@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       currentUser = apiUser || {
         id: String(Date.now()),
         email,
-        role: email.toLowerCase().includes('admin') ? 'admin' : 'user',
+        role: 'user',
       }
     }
 
