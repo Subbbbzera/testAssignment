@@ -1,22 +1,22 @@
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
-import { AppModule, ObserveInstrument } from './app.module.js';
+import { AppModule } from './app.module.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
-    instrument: ObserveInstrument,
-  });
+  const app = await NestFactory.create(AppModule);
 
-  // Дозволяємо запити з фронтенду та передачу cookie / headers
   app.enableCors({
-    origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+    origin: [
+      'http://localhost:5173',
+      'http://localhost:5174',
+    ],
     credentials: true,
   });
 
   app.use(cookieParser());
 
-  // Автоматична валідація вхідних даних (DTO)
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -26,7 +26,7 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port, () => {
-    console.log(`🚀 Бекенд успішно запущено на http://localhost:${port}`);
+    console.log(`Бекенд успішно запущено на http://localhost:${port}`);
   });
 }
 

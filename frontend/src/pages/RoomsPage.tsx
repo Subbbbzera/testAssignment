@@ -1,32 +1,79 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Users, Calendar, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Navbar from '../components/Navbar'
 import AuthModal from '../components/AuthModal'
 import { useAuth } from '../context/AuthContext'
+import { apiClient } from '../api/client'
 import type { Room } from '../types'
 
-const MOCK_ROOMS: Room[] = [
-  { id: '1', name: 'Оріон', capacity: 6 },
-  { id: '2', name: 'Андромеда', capacity: 10 },
-  { id: '3', name: 'Кассіопея', capacity: 4 },
-  { id: '4', name: 'Сіріус', capacity: 8 },
-  { id: '5', name: 'Вега', capacity: 2 },
-  { id: '6', name: 'Пегас', capacity: 12 },
-]
-
 export default function RoomsPage() {
-  const { isAuthenticated, user } = useAuth()
+  const { isAuthenticated, user, isAdmin } = useAuth()
   const [isAuthOpen, setIsAuthOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('rooms')
 
-  // Форма дат
+  // Форма дат пошуку
   const [startTime, setStartTime] = useState('')
   const [endTime, setEndTime] = useState('')
 
   // Стан пошуку
   const [searchState, setSearchState] = useState<'initial' | 'loading' | 'success' | 'empty'>('initial')
   const [rooms, setRooms] = useState<Room[]>([])
+
+  // Стан адмін-панелі створення кімнат
+  const [newRoomName, setNewRoomName] = useState('')
+  const [newRoomCapacity, setNewRoomCapacity] = useState('')
+  const [allRooms, setAllRooms] = useState<Room[]>([])
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false)
+
+  // Завантажуємо список усіх кімнат для адміна з реального API
+  useEffect(() => {
+    if (activeTab === 'admin-rooms' && isAdmin) {
+      apiClient
+        .get('/rooms')
+        .then((res) => {
+          if (Array.isArray(res.data)) {
+            setAllRooms(res.data)
+          }
+        })
+        .catch(() => {
+          toast.error('Не вдалося завантажити список кімнат')
+        })
+    }
+  }, [activeTab, isAdmin])
+
+  // Обробник створення нової кімнати (Admin)
+  const handleCreateRoom = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!newRoomName.trim()) {
+      toast.error('Вкажіть назву кімнати')
+      return
+    }
+
+    const capacityNum = Number(newRoomCapacity)
+    if (!capacityNum || capacityNum < 1) {
+      toast.error('Місткість має бути цілим числом більше 0')
+      return
+    }
+
+    setIsCreatingRoom(true)
+    try {
+      const res = await apiClient.post('/rooms', {
+        name: newRoomName.trim(),
+        capacity: capacityNum,
+      })
+      const created = res.data
+      setAllRooms((prev) => [...prev, created])
+      toast.success(`Кімнату «${created.name}» успішно створено!`)
+      setNewRoomName('')
+      setNewRoomCapacity('')
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Помилка при створенні кімнати')
+    } finally {
+      setIsCreatingRoom(false)
+    }
+  }
 
   // Обробник пошуку кімнат
   const handleSearch = (e: React.FormEvent) => {
@@ -37,40 +84,68 @@ export default function RoomsPage() {
       return
     }
 
-    if (new Date(startTime) >= new Date(endTime)) {
+    const startDate = new Date(startTime)
+    const endDate = new Date(endTime)
+
+    if (startDate >= endDate) {
       toast.error('Час початку має бути раніше за час завершення')
       return
     }
 
-    if (new Date(startTime) < new Date()) {
+    if (startDate < new Date()) {
       toast.error('Початок бронювання не може бути в минулому')
       return
     }
 
     setSearchState('loading')
 
-    // Імітація запиту до API
-    setTimeout(() => {
-      setRooms(MOCK_ROOMS.slice(0, 3))
-      setSearchState('success')
-    }, 600)
+    // Запит до реального API GET /rooms/available?start_time=...&end_time=...
+    apiClient
+      .get('/rooms/available', {
+        params: {
+          start_time: startDate.toISOString(),
+          end_time: endDate.toISOString(),
+        },
+      })
+      .then((res) => {
+        const availableRooms = res.data
+        setRooms(availableRooms)
+        setSearchState(availableRooms.length > 0 ? 'success' : 'empty')
+      })
+      .catch(() => {
+        toast.error('Не вдалося отримати список кімнат. Перевірте підключення до сервера.')
+        setSearchState('initial')
+      })
   }
 
   // Обробник бронювання
-  const handleBook = (room: Room) => {
+  const handleBook = async (room: Room) => {
     if (!isAuthenticated) {
       toast('Будь ласка, увійдіть у систему для бронювання')
       setIsAuthOpen(true)
       return
     }
 
-    // Демонстрація 409 конфлікту для однієї з кімнат
-    if (room.id === '3') {
-      toast.error('Кімната вже зайнята на цей час (409)')
+    if (!startTime || !endTime) {
+      toast.error('Оберіть бажаний час для бронювання')
       return
     }
 
-    toast.success(`Кімнату «${room.name}» успішно заброньовано для ${user?.email}!`)
+    try {
+      await apiClient.post('/bookings', {
+        room_id: room.id,
+        user_id: user?.id,
+        start_time: new Date(startTime).toISOString(),
+        end_time: new Date(endTime).toISOString(),
+      })
+      toast.success(`Кімнату «${room.name}» успішно заброньовано!`)
+    } catch (err: any) {
+      if (err.response?.status === 409) {
+        toast.error('Кімната вже зайнята на цей час')
+      } else {
+        toast.error(err.response?.data?.message || 'Помилка при бронюванні')
+      }
+    }
   }
 
   return (
@@ -79,14 +154,14 @@ export default function RoomsPage() {
       {/* Головний контейнер-картка (max-width ~900px, rounded 12px, border 1px) */}
       <main className="w-full max-w-[900px] bg-[#1a1a1a] rounded-[12px] border border-[#2a2a2a] overflow-hidden shadow-2xl">
         
-        {/* Навбар: динамічно адаптується до авторизації та ролі */}
+        {/* Навбар: динамічно адаптується до ролі та стану авторизації */}
         <Navbar 
           activeTab={activeTab} 
           onSelectTab={setActiveTab} 
           onOpenAuth={() => setIsAuthOpen(true)} 
         />
 
-        {/* Контент активної вкладки */}
+        {/* 1. Вкладка "Кімнати" (Пошук та бронювання) */}
         {activeTab === 'rooms' && (
           <div className="p-5 sm:p-6 space-y-6">
             
@@ -224,7 +299,89 @@ export default function RoomsPage() {
           </div>
         )}
 
-        {/* Заглушки для інших розділів (для демонстрації перемикання хедеру) */}
+        {/* 2. Вкладка "Керування кімнатами" (Лише Admin) */}
+        {activeTab === 'admin-rooms' && (
+          <div className="p-5 sm:p-6 space-y-6">
+            <h1 className="text-[18px] font-medium text-white tracking-tight">
+              Керування кімнатами
+            </h1>
+
+            {/* Форма створення нової кімнати */}
+            <form onSubmit={handleCreateRoom} className="p-4 bg-[#202020]/60 border border-[#2a2a2a] rounded-[12px] space-y-3">
+              <h2 className="text-sm font-semibold text-white">Додати нову переговорну</h2>
+              
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
+                {/* Назва */}
+                <div className="flex-1 flex flex-col gap-1.5">
+                  <label htmlFor="room-name" className="text-xs text-neutral-400 font-normal">
+                    Назва кімнати
+                  </label>
+                  <input
+                    id="room-name"
+                    type="text"
+                    value={newRoomName}
+                    onChange={(e) => setNewRoomName(e.target.value)}
+                    placeholder="Наприклад: Нептун"
+                    className="w-full bg-[#242424] border border-neutral-700 rounded-[8px] h-[38px] px-3 text-sm text-neutral-200 placeholder:text-neutral-500 focus:outline-none focus:border-sky-500 transition-colors"
+                  />
+                </div>
+
+                {/* Місткість */}
+                <div className="w-full sm:w-36 flex flex-col gap-1.5">
+                  <label htmlFor="room-capacity" className="text-xs text-neutral-400 font-normal">
+                    Місткість (місць)
+                  </label>
+                  <input
+                    id="room-capacity"
+                    type="number"
+                    min="1"
+                    value={newRoomCapacity}
+                    onChange={(e) => setNewRoomCapacity(e.target.value)}
+                    placeholder="6"
+                    className="w-full bg-[#242424] border border-neutral-700 rounded-[8px] h-[38px] px-3 text-sm text-neutral-200 placeholder:text-neutral-500 focus:outline-none focus:border-sky-500 transition-colors"
+                  />
+                </div>
+
+                {/* Кнопка створення */}
+                <button
+                  type="submit"
+                  disabled={isCreatingRoom}
+                  className="h-[38px] px-5 bg-white text-neutral-900 text-sm font-medium rounded-[8px] hover:bg-neutral-200 active:scale-[0.99] transition-all shrink-0 cursor-pointer disabled:opacity-50"
+                >
+                  {isCreatingRoom ? 'Створення...' : 'Створити кімнату'}
+                </button>
+              </div>
+            </form>
+
+            {/* Список кімнат */}
+            <div className="space-y-3">
+              <h2 className="text-xs text-neutral-400 font-normal">
+                Усі кімнати системи ({allRooms.length})
+              </h2>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {allRooms.map((room) => (
+                  <div
+                    key={room.id}
+                    className="border border-[#2a2a2a] bg-[#202020]/70 rounded-[12px] p-4 flex flex-col justify-between"
+                  >
+                    <div>
+                      <h3 className="text-[16px] font-semibold text-white tracking-tight">
+                        {room.name}
+                      </h3>
+                      <div className="flex items-center gap-1.5 text-xs text-neutral-400 mt-1">
+                        <Users className="w-3.5 h-3.5 text-neutral-400" />
+                        <span>{room.capacity} місць</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 3. Вкладка "Мої броні" (Користувач) */}
         {activeTab === 'my-bookings' && (
           <div className="p-8 text-center text-neutral-400">
             <h2 className="text-lg font-medium text-white mb-2">Мої бронювання</h2>
@@ -232,13 +389,7 @@ export default function RoomsPage() {
           </div>
         )}
 
-        {activeTab === 'admin-rooms' && (
-          <div className="p-8 text-center text-neutral-400">
-            <h2 className="text-lg font-medium text-white mb-2">Керування кімнатами (Admin)</h2>
-            <p className="text-sm text-neutral-500">Форма створення та налаштування кімнат.</p>
-          </div>
-        )}
-
+        {/* 4. Вкладка "Усі броні" (Admin) */}
         {activeTab === 'admin-bookings' && (
           <div className="p-8 text-center text-neutral-400">
             <h2 className="text-lg font-medium text-white mb-2">Усі бронювання системи (Admin)</h2>
@@ -248,7 +399,7 @@ export default function RoomsPage() {
 
       </main>
 
-      {/* Модальне вікно авторизації / реєстрації */}
+      {/* Модальне вікно авторизації */}
       <AuthModal isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} />
 
     </div>
